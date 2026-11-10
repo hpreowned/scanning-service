@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Stage 2 of a scan: GitHub dependency review between the empty baseline and the bundle commit.
 
-Writes results/deps.json. Never raises a verdict itself; `status: error` there becomes ERROR in verdict.py.
+Writes results/deps.json. Never raises a verdict itself; `status: error` there becomes an `error` verdict in verdict.py.
 The dependency graph can lag a fresh push, so an empty answer for a bundle that has pinned dependencies is retried.
 """
 import argparse

@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Stage 1 of a scan: prove the checked-out tree is what was requested, then take inventory.
 
-Fails closed: any tree check that does not hold writes `ok: false` and exits 1, which verdict.py turns into ERROR.
+Fails closed: any tree check that does not hold writes `ok: false` and exits 1, which verdict.py turns into `error`.
 """
 import argparse
 import subprocess

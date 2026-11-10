@@ -102,7 +102,7 @@ def complete(service, record, run):
         record.findings = record.findings + error_finding(f"the scan run ended `{conclusion}`")
         record.finish(ERROR, f"run {conclusion}")
     else:
-        record.finish(verdict["status"])
+        record.finish(str(verdict["status"]).lower())
 
 
 def after_final(service, record):
@@ -138,6 +138,6 @@ def verdict_problem(verdict, record):
         return "the verdict is for a different request"
     if verdict.get("commit_sha") != record.commit_sha:
         return "the verdict is for a different commit than the one pushed"
-    if verdict.get("status") not in FINAL:
+    if str(verdict.get("status", "")).lower() not in FINAL:  # accepts either case from the workflow
         return f"unknown verdict status {verdict.get('status')!r}"
     return None

@@ -17,18 +17,18 @@ import time
 from pathlib import Path
 
 from scansvc.bundle import zip_directory
-from scansvc.wiring import LocalBackend
+from scansvc.backends import LocalBackend
 
 BUNDLES = Path(__file__).parent / "fixtures" / "bundles"
 # name -> (expected status, rule that must be present or None)
 CASES = {
-    "static-ok": ("PASS", None),
-    "static-xss": ("FAIL", "GH-001"),
-    "node-vuln-dep": ("FAIL", "GH-003"),
-    "python-cmd-injection": ("FAIL", "GH-001"),
-    "workflow-injection": ("PASS", None),
+    "static-ok": ("pass", None),
+    "static-xss": ("fail", "GH-001"),
+    "node-vuln-dep": ("fail", "GH-003"),
+    "python-cmd-injection": ("fail", "GH-001"),
+    "workflow-injection": ("pass", None),
 }
-FINAL = ("PASS", "FAIL", "ERROR")
+FINAL = ("pass", "fail", "error")
 
 
 def secret_bundle(tmp):
@@ -46,7 +46,7 @@ def wait(backend, record, timeout):
     deadline = time.time() + timeout
     while record["status"] not in FINAL and time.time() < deadline:
         time.sleep(15)
-        record = backend.status(record["scan_id"])
+        record = backend.status(record["scanId"])
     return record
 
 
@@ -62,7 +62,7 @@ def main():
     cases = {name: (BUNDLES / name, *expect) for name, expect in CASES.items()}
     if args.with_secret:
         import tempfile
-        cases["generated-secret"] = (secret_bundle(tempfile.mkdtemp(prefix="e2e-")), "FAIL", "GH-005")
+        cases["generated-secret"] = (secret_bundle(tempfile.mkdtemp(prefix="e2e-")), "fail", "GH-005")
     if args.only:
         cases = {args.only: cases[args.only]}
 
@@ -75,7 +75,7 @@ def main():
         ok = record["status"] == want_status and (want_rule is None or want_rule in rules)
         failures += 0 if ok else 1
         print(f"{'ok  ' if ok else 'FAIL'} {name:<22} got {record['status']:<7} {rules} "
-              f"want {want_status} {want_rule or ''}  {record.get('run_url') or record.get('detail') or ''}")
+              f"want {want_status} {want_rule or ''}  {record.get('runUrl') or record.get('detail') or ''}")
     print("all cases matched" if not failures else f"{failures} case(s) did not match")
     return 1 if failures else 0
 

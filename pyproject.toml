@@ -1,6 +1,6 @@
 [project]
 name = "scansvc"
-version = "0.1.0"
+version = "0.2.0"
 description = "GitHub-backed security scan service for AI-generated artifact bundles"
 requires-python = ">=3.12"
 dependencies = [
@@ -25,5 +25,5 @@ build-backend = "hatchling.build"
 packages = ["scansvc"]
 
 [tool.pytest.ini_options]
-testpaths = ["tests", "scan-repo/scanner/tests"]
-pythonpath = ["scan-repo/scanner", "scan-repo/scanner/tests"]
+testpaths = ["tests", "scan-workspace/scanner/tests"]
+pythonpath = ["scan-workspace/scanner", "scan-workspace/scanner/tests"]

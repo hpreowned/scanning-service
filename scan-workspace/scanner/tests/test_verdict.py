@@ -37,7 +37,7 @@ class Verdict(unittest.TestCase):
     def test_clean_scan_passes(self):
         out = results_dir({"codeql_languages": ["javascript-typescript"]}, sarifs={"javascript.sarif": sarif([], {})})
         result = build(out)
-        self.assertEqual(result["status"], "PASS")
+        self.assertEqual(result["status"], "pass")
         self.assertEqual(result["commit_sha"], SHA)
         self.assertEqual(state(result, "codeql"), "ran")
         self.assertEqual(state(result, "dependency-review"), "not_applicable")
@@ -45,7 +45,7 @@ class Verdict(unittest.TestCase):
     def test_high_severity_codeql_result_fails(self):
         body = sarif([("js/xss", "scan-target/artifact/index.html", 12, "DOM text reinterpreted as HTML.\nmore")], {"js/xss": 7.8})
         result = build(results_dir({"codeql_languages": ["javascript-typescript"]}, sarifs={"javascript.sarif": body}))
-        self.assertEqual(result["status"], "FAIL")
+        self.assertEqual(result["status"], "fail")
         found = result["findings"][0]
         self.assertEqual((found["rule"], found["severity"], found["file"], found["line"]), ("GH-001", "deny", "index.html", 12))
         self.assertNotIn("more", found["message"])
@@ -53,24 +53,24 @@ class Verdict(unittest.TestCase):
     def test_lower_severity_codeql_result_only_warns(self):
         body = sarif([("py/x", "artifact/a.py", 1, "meh")], {"py/x": 5.0})
         result = build(results_dir({"codeql_languages": ["python"]}, sarifs={"python.sarif": body}))
-        self.assertEqual(result["status"], "PASS")
+        self.assertEqual(result["status"], "pass")
         self.assertEqual(result["summary"]["warn"], 1)
 
     def test_missing_sarif_for_a_requested_language_is_an_error(self):
         result = build(results_dir({"codeql_languages": ["javascript-typescript", "python"]},
                                    sarifs={"javascript.sarif": sarif([], {})}))
-        self.assertEqual(result["status"], "ERROR")
+        self.assertEqual(result["status"], "error")
         self.assertEqual(state(result, "codeql"), "missing")
         self.assertIn("GH-000", [f["rule"] for f in result["findings"]])
 
     def test_missing_inventory_is_an_error(self):
-        self.assertEqual(build(results_dir())["status"], "ERROR")
+        self.assertEqual(build(results_dir())["status"], "error")
 
     def test_failed_tree_check_is_an_error(self):
         out = results_dir()
         write_json(out / "inventory.json", {"ok": False, "error": "outside artifact/"})
         result = build(out)
-        self.assertEqual(result["status"], "ERROR")
+        self.assertEqual(result["status"], "error")
         self.assertIn("outside artifact/", result["findings"][0]["message"])
 
     def test_vulnerable_dependency_fails_by_severity(self):
@@ -78,19 +78,19 @@ class Verdict(unittest.TestCase):
                   "vulnerabilities": [{"severity": "high", "ghsa": "GHSA-x", "summary": "bad", "url": "u"},
                                       {"severity": "moderate", "ghsa": "GHSA-y", "summary": "meh", "url": "u"}]}
         result = build(results_dir({"manifests": ["package-lock.json"]}, deps={"status": "ok", "changes": [change]}))
-        self.assertEqual(result["status"], "FAIL")
+        self.assertEqual(result["status"], "fail")
         self.assertEqual(sorted(f["rule"] for f in result["findings"]), ["GH-003", "GH-004"])
         self.assertEqual(result["findings"][0]["file"], "package-lock.json")
 
     def test_dependency_review_error_or_absence_is_an_error(self):
         inv = {"manifests": ["package-lock.json"]}
-        self.assertEqual(build(results_dir(inv, deps={"status": "error", "detail": "HTTP 500", "changes": []}))["status"], "ERROR")
-        self.assertEqual(build(results_dir(inv))["status"], "ERROR")
+        self.assertEqual(build(results_dir(inv, deps={"status": "error", "detail": "HTTP 500", "changes": []}))["status"], "error")
+        self.assertEqual(build(results_dir(inv))["status"], "error")
 
     def test_prepare_findings_are_restamped_from_the_rule_table(self):
         inv = {"findings": [{"rule": "GH-006", "severity": "info", "message": "marker", "file": "a.py"}]}
         result = build(results_dir(inv))
-        self.assertEqual(result["status"], "FAIL")
+        self.assertEqual(result["status"], "fail")
         self.assertEqual(result["findings"][0]["severity"], "deny")
 
     def test_notebook_findings_point_at_the_notebook(self):
@@ -107,7 +107,7 @@ class Verdict(unittest.TestCase):
         verdict.precheck(out, {**POLICY, "short_circuit": True})
         self.assertTrue((out / "short_circuit.json").exists())
         result = build(out)
-        self.assertEqual((result["status"], state(result, "codeql")), ("FAIL", "skipped"))
+        self.assertEqual((result["status"], state(result, "codeql")), ("fail", "skipped"))
 
 
 class DependencyReview(unittest.TestCase):

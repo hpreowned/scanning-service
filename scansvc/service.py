@@ -9,9 +9,9 @@ import subprocess
 import tempfile
 import time
 
-from . import audit, collect, metrics, scan_repo
+from . import audit, git_push, metrics, verdicts
 from .bundle import BundleError, extract, sha256_hex
-from .collect import error_finding
+from .verdicts import error_finding
 from .github_api import GitHubError
 from .models import (CREATED, DISPATCHED, DISPATCHING, ERROR, FAIL, PASS, PUSHED, Busy, ScanRecord, finding,
                      new_scan_id)
@@ -22,14 +22,14 @@ POLICY_MEMO_SECONDS = 300
 
 
 class ScanService:
-    def __init__(self, settings, store, github, tokens, git=scan_repo, now=time.time, precheck=gitleaks_findings):
+    def __init__(self, settings, store, github, tokens, git=git_push, now=time.time, precheck=gitleaks_findings):
         self.settings, self.store, self.github, self.tokens = settings, store, github, tokens
         self.git, self.now, self.precheck = git, now, precheck
         self._policy = (None, 0.0)
 
     # --- submit -------------------------------------------------------------------------------------------------
 
-    def submit(self, data, claimed_sha256=None, job_ref=None, caller=None, trace=None):
+    def submit(self, data, claimed_sha256=None, job_id=None, caller=None, traceparent=None):
         """Returns (record, reused). Raises BundleError for an unacceptable upload and Busy when at capacity."""
         digest = sha256_hex(data)
         if claimed_sha256 and claimed_sha256.lower() != digest:
@@ -47,7 +47,7 @@ class ScanService:
             except BundleError:
                 metrics.inc("scansvc_submits_total", outcome="rejected")
                 raise
-            record, reused = self._claim(digest, job_ref, caller, trace)
+            record, reused = self._claim(digest, job_id, caller, traceparent)
             if not self._settled(record):
                 record = self._drive(record, workdir, paths)
         return record, reused
@@ -61,10 +61,10 @@ class ScanService:
         fresh = self.now() - record.updated_at < self.settings.cache_seconds
         return record.status in (PASS, FAIL) and fresh and record.policy_version == self._policy_version()
 
-    def _claim(self, digest, job_ref, caller, trace):
+    def _claim(self, digest, job_id, caller, traceparent):
         """The record to work on: an unfinished one for these bytes, or a new one that won the sha256 pointer."""
         def fresh(scan_id):
-            return ScanRecord(scan_id=scan_id, sha256=digest, job_ref=job_ref, caller=caller, trace=trace,
+            return ScanRecord(scan_id=scan_id, sha256=digest, job_id=job_id, caller=caller, traceparent=traceparent,
                               created_at=self.now(), updated_at=self.now())
 
         for _ in range(5):
@@ -106,7 +106,7 @@ class ScanService:
             if record.step == CREATED and not self._push(record, workdir, paths):
                 self._finalise(record)
                 return record
-            collect.dispatch_once(self, record)
+            verdicts.dispatch_once(self, record)
         except Conflict:
             return self.store.get(record.scan_id) or record  # another replica is driving it; report its view
         except GitHubError as err:
@@ -133,7 +133,7 @@ class ScanService:
         try:
             record.commit_sha = self.git.build_commit(workdir, record.scan_id, paths)
             self.git.push(workdir, self.settings, self.tokens.token(), record.scan_id, record.commit_sha)
-        except scan_repo.PushError as err:
+        except git_push.PushError as err:
             if err.secret:
                 record.finish(FAIL, str(err), [finding("GH-005", "deny", str(err))])
             else:
@@ -165,7 +165,7 @@ class ScanService:
             self._save(record)
         except Conflict:
             return
-        collect.after_final(self, record)
+        verdicts.after_final(self, record)
 
     def _policy_version(self):
         version, fetched = self._policy
@@ -180,7 +180,7 @@ class ScanService:
     # --- collecting -------------------------------------------------------------------------------------------
 
     def advance(self, scan_id):
-        return collect.advance(self, scan_id)
+        return verdicts.advance(self, scan_id)
 
     def reconcile(self):
         """Advances every scan nobody is polling. Run it on a schedule."""

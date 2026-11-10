@@ -7,10 +7,10 @@ same: one scan id, one branch, one workflow dispatch, and the scan still reaches
 from concurrent.futures import ThreadPoolExecutor
 
 import pytest
-from conftest import Clock, FakeGit, FakeGitHub, Tokens, evidence_zip, make_zip
+from fakes import Clock, FakeGit, FakeGitHub, Tokens, evidence_zip, make_zip
 
 from scansvc.bundle import sha256_hex
-from scansvc.scans import ScanService
+from scansvc.service import ScanService
 from scansvc.store import Conflict, DiskStore
 
 BUNDLE = make_zip({"index.html": "<p>hi</p>"})
@@ -40,7 +40,7 @@ def service_on(settings, store, github, git, clock):
 
 def passing(record):
     return evidence_zip({"schema": 1, "request_id": record.scan_id, "commit_sha": record.commit_sha,
-                         "status": "PASS", "policy_version": "p1", "findings": []})
+                         "status": "pass", "policy_version": "p1", "findings": []})
 
 
 # Record writes during one submit: 1 created, 2 pushed, 3 dispatching (claim), 4 dispatched.
@@ -71,7 +71,7 @@ def test_crash_at_each_step_then_resubmit_converges_without_duplicates(settings,
 
     github.run = {"id": 1, "status": "completed", "conclusion": "success"}
     github.evidence = passing(record)
-    assert service.advance(record.scan_id).status == "PASS"
+    assert service.advance(record.scan_id).status == "pass"
     assert len(store.pending()) == 0
 
 
@@ -114,7 +114,7 @@ def test_a_scan_that_never_reached_github_times_out_if_nobody_resubmits(settings
     [stuck] = store.pending()
     assert service.advance(stuck.scan_id).status == "running"
     clock.value += 601
-    assert service.advance(stuck.scan_id).status == "ERROR"
+    assert service.advance(stuck.scan_id).status == "error"
 
 
 def test_every_call_can_be_replayed(settings):
@@ -129,7 +129,7 @@ def test_every_call_can_be_replayed(settings):
     github.run = {"id": 1, "status": "completed", "conclusion": "success"}
     github.evidence = passing(first)
     results = [service.advance(first.scan_id).status for _ in range(3)]
-    assert results == ["PASS", "PASS", "PASS"]
+    assert results == ["pass", "pass", "pass"]
     assert len(github.dispatched) == 1 and len(set(git.pushed)) == 1
     assert github.deleted == [f"scan/{first.scan_id}"]              # cleanup ran once
     assert len(list(store._evidence.glob("*.zip"))) == 1
@@ -164,14 +164,14 @@ def test_two_replicas_finishing_the_same_scan_record_one_outcome(settings):
     b.github.evidence = passing(record)
 
     def a_downloads_while_b_finishes(run_id):
-        assert b.advance(record.scan_id).status == "PASS"           # B wins the write
+        assert b.advance(record.scan_id).status == "pass"           # B wins the write
         return passing(record)
     github.download_evidence = a_downloads_while_b_finishes
 
     result = a.advance(record.scan_id)                              # A's write conflicts; it reports B's result
-    assert result.status == "PASS"
+    assert result.status == "pass"
     stored = store.get(record.scan_id)
-    assert stored.status == "PASS" and stored.version == result.version
+    assert stored.status == "pass" and stored.version == result.version
     assert len(list(store._evidence.glob("*.zip"))) == 1
 
 
@@ -183,7 +183,7 @@ def test_a_stale_copy_of_a_record_cannot_overwrite_a_newer_one(settings):
     fresh = store.get(record.scan_id)
     fresh.detail = "newer"
     store.put(fresh)
-    stale.finish("PASS")
+    stale.finish("pass")
     with pytest.raises(Conflict):
         store.put(stale)
     assert store.get(record.scan_id).status == "running"

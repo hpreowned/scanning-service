@@ -3,15 +3,15 @@ import subprocess
 from pathlib import Path
 
 import pytest
-from conftest import make_zip
+from fakes import make_zip
 
-import prepare  # the workflow's own tree check, from scan-repo/scanner
+import prepare  # the workflow's own tree check, from scan-workspace/scanner
 from common import read_json
-from scansvc import scan_repo
+from scansvc import git_push
 from scansvc.bundle import extract
 
 LIMITS = dict(max_bytes=1_000_000, max_files=50, max_file_bytes=100_000)
-POLICY = str(Path(__file__).resolve().parents[1] / "scan-repo" / "scanner" / "policy.json")
+POLICY = str(Path(__file__).resolve().parents[1] / "scan-workspace" / "scanner" / "policy.json")
 
 
 def git(repo, *args):
@@ -22,7 +22,7 @@ def commit(tmp_path, files, name="work"):
     workdir = tmp_path / name
     workdir.mkdir()
     paths = extract(make_zip(files), workdir, **LIMITS)
-    return workdir, scan_repo.build_commit(workdir, "s-test1234", paths)
+    return workdir, git_push.build_commit(workdir, "s-test1234", paths)
 
 
 def test_tree_holds_only_plain_files_under_artifact_on_an_empty_baseline(tmp_path):
@@ -30,7 +30,7 @@ def test_tree_holds_only_plain_files_under_artifact_on_an_empty_baseline(tmp_pat
     entries = git(workdir, "ls-tree", "-r", sha).splitlines()
     assert all(line.startswith("100644 blob") for line in entries)
     assert sorted(line.split("\t")[1] for line in entries) == ["artifact/.github/workflows/evil.yml", "artifact/index.html"]
-    assert git(workdir, "rev-parse", f"{sha}^^{{tree}}") == scan_repo.EMPTY_TREE
+    assert git(workdir, "rev-parse", f"{sha}^^{{tree}}") == git_push.EMPTY_TREE
 
 
 def test_baseline_commit_is_the_same_every_time(tmp_path):
@@ -57,7 +57,7 @@ def test_push_creates_the_scan_branch_and_prepare_accepts_it(tmp_path, settings)
     remote.mkdir(parents=True)
     git(remote, "init", "-q", "--bare")
     workdir, sha = commit(tmp_path, {"index.html": "<script>let a = 1</script>", "app.py": "print(1)"})
-    scan_repo.push(workdir, settings, "not-a-real-token", "s-test1234", sha)
+    git_push.push(workdir, settings, "not-a-real-token", "s-test1234", sha)
     assert git(remote, "rev-parse", "refs/heads/scan/s-test1234") == sha
 
     checkout = tmp_path / "checkout"
@@ -70,7 +70,7 @@ def test_push_creates_the_scan_branch_and_prepare_accepts_it(tmp_path, settings)
 
 def test_push_failure_is_reported_without_credentials(tmp_path, settings):
     workdir, sha = commit(tmp_path, {"a.js": "1"})
-    with pytest.raises(scan_repo.PushError) as raised:
-        scan_repo.push(workdir, settings, "not-a-real-token", "s-test1234", sha)  # no remote exists
+    with pytest.raises(git_push.PushError) as raised:
+        git_push.push(workdir, settings, "not-a-real-token", "s-test1234", sha)  # no remote exists
     assert not raised.value.secret
     assert "not-a-real-token" not in str(raised.value)

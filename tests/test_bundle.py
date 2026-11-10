@@ -1,5 +1,5 @@
 import pytest
-from conftest import make_zip
+from fakes import make_zip
 
 from scansvc.bundle import BundleError, extract, sha256_hex, zip_directory
 

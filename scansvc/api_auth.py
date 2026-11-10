@@ -27,7 +27,7 @@ class SharedTokenAuth:
 
     def __init__(self, token):
         if not token:
-            raise ValueError("SCAN_AUTH_MODE=token needs SCAN_API_TOKEN")
+            raise ValueError("API_AUTH_MODE=token needs SCAN_API_TOKEN")
         self._token = token
 
     def verify(self, header):
@@ -41,7 +41,7 @@ class EntraAuth:
 
     def __init__(self, tenant_id, audience, allowed_callers, signing_key=None):
         if not (tenant_id and audience and allowed_callers):
-            raise ValueError("SCAN_AUTH_MODE=entra needs ENTRA_TENANT_ID, ENTRA_AUDIENCE and ENTRA_ALLOWED_CALLERS")
+            raise ValueError("API_AUTH_MODE=entra needs ENTRA_TENANT_ID, ENTRA_AUDIENCE and ENTRA_ALLOWED_CALLERS")
         self._tenant, self._audience, self._allowed = tenant_id, audience, set(allowed_callers)
         self._issuers = {f"https://login.microsoftonline.com/{tenant_id}/v2.0", f"https://sts.windows.net/{tenant_id}/"}
         if signing_key is None:
@@ -74,4 +74,4 @@ def auth_for(settings):
         return EntraAuth(settings.entra_tenant_id, settings.entra_audience, settings.entra_allowed_callers)
     if mode == "token":
         return SharedTokenAuth(settings.api_token)
-    raise ValueError("SCAN_AUTH_MODE must be set to entra or token; the API has no unauthenticated mode")
+    raise ValueError("API_AUTH_MODE must be set to entra or token; the API has no unauthenticated mode")

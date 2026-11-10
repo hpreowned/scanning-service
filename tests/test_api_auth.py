@@ -5,7 +5,7 @@ import jwt
 import pytest
 from cryptography.hazmat.primitives.asymmetric import rsa
 
-from scansvc.auth import AuthError, EntraAuth, SharedTokenAuth, auth_for
+from scansvc.api_auth import AuthError, EntraAuth, SharedTokenAuth, auth_for
 from scansvc import config
 
 TENANT = "11111111-1111-1111-1111-111111111111"
@@ -88,7 +88,7 @@ def test_shared_token_mode_and_mode_selection():
     with pytest.raises(ValueError, match="no unauthenticated mode"):
         auth_for(config.load(base))
     with pytest.raises(ValueError, match="ENTRA_ALLOWED_CALLERS"):
-        auth_for(config.load({**base, "SCAN_AUTH_MODE": "entra", "ENTRA_TENANT_ID": TENANT, "ENTRA_AUDIENCE": AUDIENCE}))
+        auth_for(config.load({**base, "API_AUTH_MODE": "entra", "ENTRA_TENANT_ID": TENANT, "ENTRA_AUDIENCE": AUDIENCE}))
     with pytest.raises(ValueError, match="SCAN_API_TOKEN"):
-        auth_for(config.load({**base, "SCAN_AUTH_MODE": "token"}))
-    assert auth_for(config.load({**base, "SCAN_AUTH_MODE": "token", "SCAN_API_TOKEN": "x"})).name == "token"
+        auth_for(config.load({**base, "API_AUTH_MODE": "token"}))
+    assert auth_for(config.load({**base, "API_AUTH_MODE": "token", "SCAN_API_TOKEN": "x"})).name == "token"

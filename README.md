@@ -2,7 +2,7 @@
 
 Scans AI-generated artifact bundles with GitHub Code Security before they are hosted. A caller uploads a zip;
 the service pushes it to a scan workspace repo, runs one workflow there (CodeQL and dependency review), and
-returns `PASS`, `FAIL` or `ERROR`.
+returns `pass`, `fail` or `error`.
 
 ```
 caller ──zip──▶ scansvc ──commit on scan/<id>──▶ scan workspace repo
@@ -11,8 +11,8 @@ caller ──zip──▶ scansvc ──commit on scan/<id>──▶ scan worksp
 caller ◀─verdict──┘
 ```
 
-- `scan-repo/` is the content of the scan workspace repo: the workflow, the scanner scripts and the repo
-  settings script. See `scan-repo/README.md` and `scan-repo/setup/README.md`.
+- `scan-workspace/` is the content of the scan workspace repo: the workflow, the scanner scripts and the repo
+  settings script. See `scan-workspace/README.md` and `scan-workspace/setup/README.md`.
 - `scansvc/` is the service and the `scanctl` CLI.
 - `contracts/` is the HTTP contract and the rule ids.
 
@@ -22,7 +22,7 @@ caller ◀─verdict──┘
 - A bundle is one commit whose parent is an empty baseline and whose files all sit under `artifact/`. Blobs are
   written without git filters, so a `.gitignore` or `.gitattributes` in the bundle cannot hide or rewrite anything.
 - Nothing in a bundle is installed, built or executed, by the service or by the workflow.
-- `ERROR` blocks. A scanner that left no output, a failed or timed-out run, or a verdict for a different commit
+- `error` blocks. A scanner that left no output, a failed or timed-out run, or a verdict for a different commit
   is never treated as a pass.
 - The verdict is bound to the sha256 of the uploaded bytes. Publish only those bytes.
 - Every step can run twice. The scan record is saved before each action and written back conditionally, so a
@@ -48,12 +48,12 @@ export GITHUB_TOKEN="$(gh auth token)"
 Run the HTTP service and call it:
 
 ```bash
-export SCAN_AUTH_MODE=token SCAN_API_TOKEN="$(openssl rand -hex 24)"   # laptop only; AKS uses entra
+export API_AUTH_MODE=token SCAN_API_TOKEN="$(openssl rand -hex 24)"   # laptop only; AKS uses entra
 .venv/bin/uvicorn scansvc.app:create_app --factory --port 8080
 SCAN_SERVICE_URL=http://localhost:8080 .venv/bin/scanctl scan my-bundle.zip --wait --json
 ```
 
-`scanctl` exit codes: 0 `PASS`, 1 `FAIL`, 2 `ERROR` or a rejected bundle, 3 still running or at capacity.
+`scanctl` exit codes: 0 `pass`, 1 `fail`, 2 `error` or a rejected bundle, 3 still running or at capacity.
 
 Live end-to-end check over the fixture bundles: `python tests/e2e_live.py` (see its docstring).
 
@@ -70,7 +70,7 @@ Live end-to-end check over the fixture bundles: `python tests/e2e_live.py` (see 
 | `GITHUB_TOKEN` | – | Token mode |
 | `GITHUB_APP_ID`, `GITHUB_APP_INSTALLATION_ID` | – | App mode |
 | `GITHUB_APP_PRIVATE_KEY_PATH` or `GITHUB_APP_PRIVATE_KEY` | – | App mode; a mounted file is preferred |
-| `SCAN_AUTH_MODE` | required for the HTTP app | `entra` (AKS) or `token` (laptop). There is no unauthenticated mode. |
+| `API_AUTH_MODE` | required for the HTTP app | `entra` (AKS) or `token` (laptop). There is no unauthenticated mode. |
 | `ENTRA_TENANT_ID`, `ENTRA_AUDIENCE` | – | Entra mode: your tenant, and the audience (app ID URI or client id) tokens must be issued for |
 | `ENTRA_ALLOWED_CALLERS` | – | Entra mode: comma-separated client ids or object ids allowed to call the API |
 | `SCAN_API_TOKEN` | – | Token mode: the shared bearer. Also what `scanctl` sends as its bearer in HTTP mode |
@@ -80,15 +80,15 @@ Live end-to-end check over the fixture bundles: `python tests/e2e_live.py` (see 
 | `MAX_SCANS_IN_FLIGHT` | `20` | Above this, new scans get HTTP 429 with `Retry-After` |
 | `GITLEAKS_BIN` | – | Enables the pre-push secret check |
 | `MAX_BUNDLE_BYTES` / `MAX_BUNDLE_FILES` / `MAX_FILE_BYTES` | 25 MiB / 500 / 5 MiB | Intake caps |
-| `SCAN_TIMEOUT_SECONDS` | `1200` | A scan still running after this becomes `ERROR` |
-| `SCAN_CACHE_SECONDS` | `86400` | How long a `PASS`/`FAIL` for the same bytes and policy version is reused |
+| `SCAN_TIMEOUT_SECONDS` | `1200` | A scan still running after this becomes `error` |
+| `SCAN_CACHE_SECONDS` | `86400` | How long a `pass`/`fail` for the same bytes and policy version is reused |
 
 GitHub App permissions: Contents read/write, Actions read/write, Metadata read, installed on the scan repo only.
 
 ## Consumers
 
-- **Artifacts scanner worker:** `POST /v1/scans`, poll `GET /v1/scans/{id}`. Map `FAIL` to `rejected` and
-  `ERROR` to `failed`; on `429` wait for `Retry-After`. Send `X-Job-Id` and `traceparent` so the audit trail
+- **Artifacts scanner worker:** `POST /v1/scans`, poll `GET /v1/scans/{id}`. Map `fail` to `rejected` and
+  `error` to `failed`; on `429` wait for `Retry-After`. Send `X-Job-Id` and `traceparent` so the audit trail
   joins up. See `contracts/findings.md` for the caller's obligations.
 - **Agents with a shell, CI:** `scanctl` with `SCAN_SERVICE_URL`.
 - **Agents over MCP:** expose `contracts/scan-openapi.yaml` through APIM as an MCP server. Bundle bytes go over
@@ -97,7 +97,7 @@ GitHub App permissions: Contents read/write, Actions read/write, Metadata read, 
 ## Deploy
 
 `GET /metrics` serves Prometheus text; every scan transition is one JSON line on stdout (logger
-`scansvc.audit`). The end-to-end design, including storage layout, is in `docs/async-design.md`.
+`scansvc.audit`). The end-to-end design, including storage layout, is in `docs/design.md`.
 
 `Dockerfile` builds the service image (`--build-arg BASE_IMAGE=` for an internal base). `deploy/k8s/` holds the
 manifests; see `deploy/k8s/README.md`.
@@ -106,13 +106,13 @@ manifests; see `deploy/k8s/README.md`.
 
 Verified live on 2026-11-10 against a public test repo on the Free plan, in token mode:
 
-- `tests/e2e_live.py`: all five fixture bundles gave the expected verdict (clean page `PASS`, DOM XSS `FAIL`
-  GH-001, vulnerable lodash `FAIL` GH-003, Python command injection `FAIL` GH-001, bundle shipping its own
-  workflow `PASS` with no extra workflow or run appearing in the repo).
-- A failed CodeQL step produced `ERROR`, a repeated upload was answered from the cache, and every `scan/*`
+- `tests/e2e_live.py`: all five fixture bundles gave the expected verdict (clean page `pass`, DOM XSS `fail`
+  GH-001, vulnerable lodash `fail` GH-003, Python command injection `fail` GH-001, bundle shipping its own
+  workflow `pass` with no extra workflow or run appearing in the repo).
+- A failed CodeQL step produced `error`, a repeated upload was answered from the cache, and every `scan/*`
   branch was deleted afterwards.
 - `configure_repo.sh --apply`, including the Actions allowlist and SHA-pin requirement, with scans still passing.
-- Push protection (`tests/e2e_live.py --with-secret`): the push was refused, the scan returned `FAIL` GH-005
+- Push protection (`tests/e2e_live.py --with-secret`): the push was refused, the scan returned `fail` GH-005
   with no workflow run, and the commit never reached GitHub.
 - One scan takes about four and a half minutes; CodeQL init and analysis are almost all of it.
 - Crash and resume: the service was killed right after pushing a bundle, restarted, and given the same bytes

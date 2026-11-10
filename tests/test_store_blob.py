@@ -64,7 +64,7 @@ def test_records_and_evidence_live_in_separate_containers(world):
     assert store.latest_for_sha("f" * 64).scan_id == "s-abc123" and store.pointer("f" * 64) == "s-abc123"
     assert store.get("s-missing") is None and store.latest_for_sha("0" * 64) is None
     assert [r.scan_id for r in store.pending()] == ["s-abc123"]
-    store.put(store.get("s-abc123").finish("PASS"))
+    store.put(store.get("s-abc123").finish("pass"))
     assert store.pending() == []
     with pytest.raises(ValueError):
         store.get("../escape")
@@ -79,10 +79,10 @@ def test_record_writes_are_conditional_on_the_etag(world):
     fresh.detail = "newer"
     store.put(fresh)
     with pytest.raises(Conflict):
-        store.put(stale.finish("PASS"))
+        store.put(stale.finish("pass"))
     assert store.get("s-abc123").status == "running"
-    store.put(fresh.finish("FAIL"))                                 # the copy that just wrote can write again
-    assert store.get("s-abc123").status == "FAIL"
+    store.put(fresh.finish("fail"))                                 # the copy that just wrote can write again
+    assert store.get("s-abc123").status == "fail"
 
 
 def test_the_sha256_pointer_is_compare_and_swap(world):

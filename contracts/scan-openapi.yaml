@@ -5,6 +5,7 @@ info:
   description: >
     Scans an AI-generated artifact bundle with GitHub Code Security (CodeQL, dependency review, push protection)
     and returns a verdict. A scan takes a few minutes; start it, then poll.
+    Field names are camelCase and status values lowercase, matching the artifacts intake API.
     Every call is safe to repeat: submitting the same bytes again continues the same scan.
 servers:
   - url: http://scansvc.artifacts-system.svc.cluster.local
@@ -76,7 +77,7 @@ paths:
       operationId: getScan
       summary: Get the status and verdict of a scan
       description: >
-        Poll every 15 seconds until status is PASS, FAIL or ERROR. Publish only on PASS. ERROR means the scan
+        Poll every 15 seconds until status is pass, fail or error. Publish only on pass. error means the scan
         did not complete and must be treated as a block, not as a pass.
       parameters:
         - name: scanId
@@ -100,20 +101,21 @@ components:
   schemas:
     Scan:
       type: object
-      required: [scan_id, sha256, status, findings]
+      required: [scanId, sha256, status, findings]
       properties:
-        scan_id: { type: string }
+        scanId: { type: string }
         sha256: { type: string, description: sha256 of the bytes that were scanned }
-        status: { type: string, enum: [running, PASS, FAIL, ERROR] }
+        status: { type: string, enum: [running, pass, fail, error] }
         reused: { type: boolean, description: True when an existing scan of the same bytes was returned }
-        commit_sha: { type: string, nullable: true }
-        run_url: { type: string, nullable: true, description: The GitHub Actions run, for operators }
-        policy_version: { type: string, nullable: true }
+        commitSha: { type: string, nullable: true }
+        runId: { type: integer, nullable: true }
+        runUrl: { type: string, nullable: true, description: The GitHub Actions run, for operators }
+        policyVersion: { type: string, nullable: true }
         detail: { type: string, nullable: true }
         step: { type: string, enum: [created, pushed, dispatching, dispatched], description: How far a running scan has got }
-        job_ref: { type: string, nullable: true, description: The X-Job-Id the scan was submitted with }
+        jobId: { type: string, nullable: true, description: The X-Job-Id the scan was submitted with }
         caller: { type: string, nullable: true }
-        trace: { type: string, nullable: true }
+        traceparent: { type: string, nullable: true }
         findings:
           type: array
           items: { $ref: "#/components/schemas/Finding" }
@@ -125,8 +127,8 @@ components:
           type: array
           description: Files no scanner covered
           items: { type: object }
-        created_at: { type: number }
-        updated_at: { type: number }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
     Finding:
       type: object
       required: [rule, severity, message]

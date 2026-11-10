@@ -33,16 +33,16 @@ def emit(event, record, **extra):
     entry = {
         "ts": round(time.time(), 3),
         "event": event,
-        "scan_id": record.scan_id,
+        "scanId": record.scan_id,
         "sha256": record.sha256,
         "status": record.status,
         "step": record.step,
-        "commit_sha": record.commit_sha,
-        "run_id": record.run_id,
-        "policy_version": record.policy_version,
-        "job_ref": record.job_ref,
+        "commitSha": record.commit_sha,
+        "runId": record.run_id,
+        "policyVersion": record.policy_version,
+        "jobId": record.job_id,
         "caller": record.caller,
-        "trace": record.trace,
+        "traceparent": record.traceparent,
         **extra,
     }
     _logger.info(json.dumps({key: value for key, value in entry.items() if value is not None}, sort_keys=True))

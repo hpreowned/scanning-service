@@ -3,7 +3,7 @@
 With SCAN_SERVICE_URL set it talks to the scan service over HTTP (what agents and CI use; no GitHub credentials
 needed). Without it, it runs the scan in-process using the GitHub settings from the environment (operators).
 
-Exit codes: 0 PASS, 1 FAIL, 2 ERROR or a rejected bundle, 3 still running or the service is at capacity.
+Exit codes: 0 pass, 1 fail, 2 error or a rejected bundle, 3 still running or the service is at capacity.
 """
 import argparse
 import json
@@ -22,9 +22,9 @@ EXIT = {PASS: 0, FAIL: 1, ERROR: 2}
 def _backend():
     url = os.environ.get("SCAN_SERVICE_URL")
     if url:
-        from .client import HttpBackend
+        from .backends import HttpBackend
         return HttpBackend(url, os.environ.get("SCAN_API_TOKEN"))
-    from .wiring import LocalBackend
+    from .backends import LocalBackend
     return LocalBackend()
 
 
@@ -39,9 +39,9 @@ def _print(record, as_json):
     if as_json:
         print(json.dumps(record, indent=2))
         return
-    print(f"{record['status']}  scan {record['scan_id']}  sha256 {record['sha256'][:12]}")
-    if record.get("run_url"):
-        print(f"  run: {record['run_url']}")
+    print(f"{record['status']}  scan {record['scanId']}  sha256 {record['sha256'][:12]}")
+    if record.get("runUrl"):
+        print(f"  run: {record['runUrl']}")
     if record.get("detail"):
         print(f"  {record['detail']}")
     for item in record.get("findings", []):
@@ -67,7 +67,7 @@ def _wait(backend, record, timeout, interval, as_json):
     deadline = time.time() + timeout
     while record["status"] not in EXIT and time.time() < deadline:
         time.sleep(interval)
-        record = backend.status(record["scan_id"])
+        record = backend.status(record["scanId"])
         if not as_json:
             print(f"  ... {record['status']}", file=sys.stderr)
     return record
@@ -96,7 +96,7 @@ def main(argv=None):
             return 0
         if args.command == "reconcile":
             for record in backend.reconcile():
-                print(f"{record['scan_id']} {record['status']}")
+                print(f"{record['scanId']} {record['status']}")
             return 0
         if args.command == "status":
             record = backend.status(args.scan_id)

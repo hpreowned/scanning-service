@@ -15,7 +15,7 @@ kubectl apply -k deploy/k8s
    on the vault.
 3. **Key Vault secret:** `scansvc-github-app-key` (the GitHub App private key, PEM). There is no API token.
 4. **Two private containers** in the existing storage account: `scans`, and `scan-evidence` with a time-based
-   retention policy. Exclude both from Defender on-upload scanning. See section 8 of `docs/async-design.md`.
+   retention policy. Exclude both from Defender on-upload scanning. See section 8 of `docs/design.md`.
 4a. **Entra app registration for the scan service** (its app ID URI is `ENTRA_AUDIENCE`). List the scanner
    worker's client id in `ENTRA_ALLOWED_CALLERS`; the worker requests a token for that audience with its own
    workload identity.

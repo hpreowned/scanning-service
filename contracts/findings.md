@@ -1,8 +1,8 @@
 # Findings and rule ids
 
 Every finding is `{ rule, severity, file?, line?, message }`, the same shape the artifacts platform uses, so a
-caller can pass them through unchanged. Severities are fixed per rule (`scan-repo/scanner/common.py`); the
-thresholds that choose between two rules live in `scan-repo/scanner/policy.json`.
+caller can pass them through unchanged. Severities are fixed per rule (`scan-workspace/scanner/common.py`); the
+thresholds that choose between two rules live in `scan-workspace/scanner/policy.json`.
 
 | Rule | Severity | Source | Meaning |
 |---|---|---|---|
@@ -20,12 +20,12 @@ thresholds that choose between two rules live in `scan-repo/scanner/policy.json`
 | Status | Meaning | Artifacts platform state |
 |---|---|---|
 | `running` | Waiting for GitHub | stays `scanning` |
-| `PASS` | Every expected scanner ran, nothing is `deny` | continue |
-| `FAIL` | At least one `deny` finding | `rejected` |
-| `ERROR` | The scan itself did not complete. Blocks exactly like `FAIL`; never auto-allow. | `failed` |
+| `pass` | Every expected scanner ran, nothing is `deny` | continue |
+| `fail` | At least one `deny` finding | `rejected` |
+| `error` | The scan itself did not complete. Blocks exactly like `fail`; never auto-allow. | `failed` |
 
 ## What the caller must do
 
 - Send the bytes it is going to publish. The verdict is bound to their sha256.
-- Publish only when `status` is `PASS` **and** the `sha256` in the answer equals the sha256 of the bytes it holds.
+- Publish only when `status` is `pass` **and** the `sha256` in the answer equals the sha256 of the bytes it holds.
 - Never accept a verdict passed along by an agent or a user. Ask this service.

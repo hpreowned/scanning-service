@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """Last stage of a scan: combine every scanner's output into verdict.json.
 
-PASS  every expected scanner ran and nothing is `deny`.
-FAIL  at least one `deny` finding.
-ERROR a scanner that should have run left no usable output. ERROR blocks, exactly like FAIL.
+pass   every expected scanner ran and nothing is `deny`.
+fail   at least one `deny` finding.
+error  a scanner that should have run left no usable output. It blocks, exactly like fail.
 """
 import argparse
 import sys
@@ -79,7 +79,7 @@ def build(results, policy, request_id, sha):
     # Stamp severities from the table, whatever a scanner wrote.
     findings = [{**f, "severity": RULES[f["rule"]]} for f in findings]
     counts = {level: sum(1 for f in findings if f["severity"] == level) for level in ("deny", "warn", "info", "error")}
-    status = "ERROR" if broken else ("FAIL" if counts["deny"] else "PASS")
+    status = "error" if broken else ("fail" if counts["deny"] else "pass")
     return {
         "schema": SCHEMA,
         "request_id": request_id,
@@ -121,7 +121,7 @@ def main(argv=None):
     verdict = build(args.results, policy, args.request_id, args.sha)
     write_json(args.out or Path(args.results) / "verdict.json", verdict)
     print(f"verdict: {verdict['status']} {verdict['summary']}")
-    # Exit 0 on FAIL too: the run succeeding means "the scan completed", the verdict file carries the answer.
+    # Exit 0 on fail too: the run succeeding means "the scan completed", the verdict file carries the answer.
     return 0
 
 

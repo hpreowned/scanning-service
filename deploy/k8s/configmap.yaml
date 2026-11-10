@@ -15,7 +15,7 @@ data:
   EVIDENCE_STORE_URL: "https://REPLACE_WITH_STORAGE_ACCOUNT.blob.core.windows.net/scan-evidence"
   MAX_SCANS_IN_FLIGHT: "20"
   # Callers present an Entra token for this audience; only the listed client or object ids are accepted.
-  SCAN_AUTH_MODE: "entra"
+  API_AUTH_MODE: "entra"
   ENTRA_TENANT_ID: "REPLACE_WITH_TENANT_ID"
   ENTRA_AUDIENCE: "REPLACE_WITH_SCANSVC_APP_ID_URI"
   ENTRA_ALLOWED_CALLERS: "REPLACE_WITH_SCANNER_WORKER_CLIENT_ID"

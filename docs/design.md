@@ -12,7 +12,7 @@ analysis about 3). Private-repo runners are smaller, so plan for 5 to 7 minutes.
 
 | # | Decision | Reason |
 |---|---|---|
-| D1 | The GitHub scan is a **gate for every tier**. Nothing goes live without a `PASS` bound to the sha256 of what was scanned. `ERROR` blocks. | The control being claimed is that AI-generated code is scanned before it is hosted; a detector cannot support that claim. |
+| D1 | The GitHub scan is a **gate for every tier**. Nothing goes live without a `pass` bound to the sha256 of what was scanned. `error` blocks. | The control being claimed is that AI-generated code is scanned before it is hosted; a detector cannot support that claim. |
 | D2 | **No call is held longer than 30 seconds.** The wait lives in durable job state, never in a connection or in process memory. | Tool calls, APIM and blob leases all time out well before 5 minutes. |
 | D3 | **Every hop is idempotent and resumable.** A crash or redelivery at any point loses no publish and starts no duplicate scan. | Scans cost runner minutes and the flow spans four systems. |
 | D4 | **Polling is the source of truth; push is only an accelerator.** | GitHub does not retry failed webhook deliveries on its own. |
@@ -31,7 +31,7 @@ Proposed numbers; confirm before build.
 | Time from finalize to verdict | p50 under 6 minutes, p95 under 10 minutes |
 | Status endpoint availability | 99.9% |
 | Sustained load | 60 publishes an hour, 20 scans in flight |
-| Publishes that went live without a matching `PASS` | 0, verified by a daily audit query |
+| Publishes that went live without a matching `pass` | 0, verified by a daily audit query |
 | Evidence retention | per records policy, immutable |
 
 ## 3. Flow
@@ -62,7 +62,7 @@ sequenceDiagram
     loop same timer, each job with a scanId, every 15 to 20 s
         W->>X: GET /v1/scans/{scanId}
         X->>G: run status, evidence when done
-        X-->>W: running or PASS / FAIL / ERROR
+        X-->>W: running or pass / fail / error
     end
     W->>B: job live / rejected / failed (or pipeline trigger), delete marker
     loop long-poll, 25 s each
@@ -115,8 +115,8 @@ There is no message broker. The job record in Blob Storage is the only state, an
 - **Poison bundles:** each claim increments `attempts` on the job. After 3 the job becomes `failed` and an alert
   fires. This replaces a dead-letter queue.
 - **Deadline:** 25 minutes after submit the job becomes `failed` with `GH-000` and a resubmit message.
-- **One automatic retry:** an `ERROR` caused by infrastructure (run did not start, GitHub unavailable) is
-  resubmitted once. An `ERROR` from a verdict or commit mismatch is never retried.
+- **One automatic retry:** an `error` caused by infrastructure (run did not start, GitHub unavailable) is
+  resubmitted once. An `error` from a verdict or commit mismatch is never retried.
 - **Smallest code change:** intake and the worker already talk through a queue interface with an in-memory and
   a Service Bus implementation. A Blob-backed implementation of that interface (publish writes the marker,
   subscribe is the list-and-lease loop) replaces Service Bus without touching the worker's stage logic.
@@ -187,8 +187,8 @@ Each layer gives up after the one below it, so the cause is always reported by t
 
 | Layer | Limit | On expiry |
 |---|---|---|
-| Workflow job (`timeout-minutes`) | 15 minutes | Run cancelled; verdict step still writes `ERROR` |
-| Scan service (`SCAN_TIMEOUT_SECONDS`) | 20 minutes | Scan `ERROR`, run cancelled, branch deleted |
+| Workflow job (`timeout-minutes`) | 15 minutes | Run cancelled; verdict step still writes `error` |
+| Scan service (`SCAN_TIMEOUT_SECONDS`) | 20 minutes | Scan `error`, run cancelled, branch deleted |
 | Worker scan deadline | 25 minutes | Job `failed`, `GH-000`, resubmit message |
 | Skill polling budget | 15 minutes | Skill stops polling; the job continues server-side |
 | Any single HTTP or MCP call | 30 seconds | Caller retries with backoff |
@@ -206,9 +206,9 @@ Each layer gives up after the one below it, so the cause is always reported by t
 | Worker is down while a scan finishes | Verdict collected late | The timer picks the job up when a replica is back; the deadline still applies |
 | Scan service replica dies mid-scan | None | State is in the store; any replica continues |
 | GitHub Actions queue is slow | Longer `deep_scan` | Within the 15-minute job limit it simply waits |
-| GitHub unavailable | Push or dispatch fails | `ERROR` (infrastructure), one automatic retry, then `failed` with a clear summary. Never auto-allow. |
-| Runner job never starts (for example a billing lock) | Run fails in seconds with no evidence | `ERROR`; alert on the first occurrence |
-| Evidence missing, or verdict for another commit | Possible tampering or a bug | `ERROR`, not retried, security alert |
+| GitHub unavailable | Push or dispatch fails | `error` (infrastructure), one automatic retry, then `failed` with a clear summary. Never auto-allow. |
+| Runner job never starts (for example a billing lock) | Run fails in seconds with no evidence | `error`; alert on the first occurrence |
+| Evidence missing, or verdict for another commit | Possible tampering or a bug | `error`, not retried, security alert |
 | Policy changes during a scan | Old verdict under a new policy | Verdict carries `policy_version`; the cache only reuses a matching version |
 | GitHub API rate limit reached | Status calls fail | Treated as transient; admission control lowers intake; alert at 20% remaining |
 | Skill gives up or the user closes Claude | None | Job completes server-side; status is available by job id |
@@ -278,7 +278,7 @@ the sha256 verdict cache (a re-publish of identical bytes costs nothing).
 - **Metrics:** time in each phase (histogram), scans in flight, active markers and the age of the oldest,
   verdicts by status, `GH-000` by cause, 429s issued, GitHub API quota remaining, jobs that used up their attempts.
 - **Tracing:** `traceparent` from intake through worker and scan service; the Actions run URL on the span.
-- **Alerts:** p95 time to verdict over target for 15 minutes; `ERROR` rate over 5%; any scan past its deadline;
+- **Alerts:** p95 time to verdict over target for 15 minutes; `error` rate over 5%; any scan past its deadline;
   any job that used up its attempts; any marker older than 30 minutes; any verdict mismatch; daily audit query
   not zero.
 - **Dashboard:** one view from finalize to live, split by phase and tier.
@@ -288,7 +288,7 @@ the sha256 verdict cache (a re-publish of identical bytes costs nothing).
 | Stage | Behaviour | Exit criterion |
 |---|---|---|
 | 0. Shadow | Scan runs on every publish; verdict recorded, not enforced; publish path unchanged | Two weeks of data: latency within target, false-positive rate understood |
-| 1. Enforce python and node | Gate before the deploy pipeline | No unexplained `ERROR`s for a week |
+| 1. Enforce python and node | Gate before the deploy pipeline | No unexplained `error`s for a week |
 | 2. Enforce static | Gate before the serving copy, on the source scan where a source bundle is supplied; skill text no longer promises "seconds" | Open decision 6 settled; publisher communication sent |
 
 A single setting on the worker selects `off`, `shadow` or `enforce` per tier.

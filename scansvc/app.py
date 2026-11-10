@@ -5,19 +5,20 @@ without one configured. /healthz and /metrics are open and carry nothing sensiti
 """
 import logging
 import re
+from importlib import metadata
 
 from fastapi import Depends, FastAPI, HTTPException, Request
 from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import JSONResponse, PlainTextResponse
 
 from . import audit, metrics
-from .auth import AuthError, auth_for
+from .api_auth import AuthError, auth_for
 from .bundle import BundleError
 from .config import ConfigError
 from .models import Busy
 from .wiring import build_service
 
-JOB_REF = re.compile(r"^[A-Za-z0-9_.:-]{1,80}$")
+JOB_ID = re.compile(r"^[A-Za-z0-9_.:-]{1,80}$")
 TRACEPARENT = re.compile(r"^[0-9a-f]{2}-[0-9a-f]{32}-[0-9a-f]{16}-[0-9a-f]{2}$")
 
 
@@ -30,6 +31,13 @@ async def _read_capped(request, limit):
             raise HTTPException(status_code=413, detail=f"the bundle is larger than {limit} bytes")
         chunks.append(chunk)
     return b"".join(chunks)
+
+
+def _version():
+    try:
+        return metadata.version("scansvc")  # pyproject.toml is the one place the version is written
+    except metadata.PackageNotFoundError:
+        return "0.0.0"
 
 
 def _clean(value, pattern):
@@ -53,7 +61,7 @@ def create_app(service=None, auth=None):
         except AuthError as err:
             raise HTTPException(status_code=401, detail=str(err)) from None
 
-    app = FastAPI(title="Artifact scan service", version="0.2.0", docs_url=None, redoc_url=None, openapi_url=None)
+    app = FastAPI(title="Artifact scan service", version=_version(), docs_url=None, redoc_url=None, openapi_url=None)
 
     @app.get("/healthz")
     def healthz():
@@ -70,14 +78,13 @@ def create_app(service=None, auth=None):
         try:
             record, reused = await run_in_threadpool(
                 service.submit, data, headers.get("x-bundle-sha256"),
-                _clean(headers.get("x-job-id"), JOB_REF), who, _clean(headers.get("traceparent"), TRACEPARENT))
+                _clean(headers.get("x-job-id"), JOB_ID), who, _clean(headers.get("traceparent"), TRACEPARENT))
         except BundleError as err:
             raise HTTPException(status_code=422, detail=str(err)) from None
         except Busy as busy:
             return JSONResponse({"detail": str(busy)}, status_code=429, headers={"Retry-After": str(busy.retry_after)})
-        body = {**record.to_dict(), "reused": reused}
-        # 202 while GitHub is still working; 200 when the answer is already final (cache hit or pre-push failure).
-        return JSONResponse(body, status_code=200 if record.final else 202)
+                # 202 while GitHub is still working; 200 when the answer is already final (cache hit or pre-push failure).
+        return JSONResponse(record.to_api(reused), status_code=200 if record.final else 202)
 
     @app.get("/v1/scans/{scan_id}", dependencies=[Depends(caller)])
     async def get_scan(scan_id: str):
@@ -86,6 +93,6 @@ def create_app(service=None, auth=None):
         record = await run_in_threadpool(service.advance, scan_id)
         if record is None:
             raise HTTPException(status_code=404, detail="unknown scan id")
-        return record.to_dict()
+        return record.to_api()
 
     return app

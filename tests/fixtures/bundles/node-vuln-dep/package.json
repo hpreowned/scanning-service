@@ -1,0 +1,7 @@
+{
+  "name": "node-vuln-dep-fixture",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": { "start": "node server.js" },
+  "dependencies": { "lodash": "4.17.15" }
+}

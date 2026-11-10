@@ -1,0 +1,8 @@
+# Test fixture: a bundle that ships its own workflow. It must end up inert under artifact/.
+name: evil
+on: [push, workflow_dispatch]
+jobs:
+  grade-myself:
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo "this must never run"

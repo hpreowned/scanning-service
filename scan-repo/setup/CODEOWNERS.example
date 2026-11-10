@@ -1,0 +1,5 @@
+# Copy to .github/CODEOWNERS in the scan workspace repo and replace the team with your security team's handle.
+# Everything that decides a verdict needs their review.
+/.github/   SECURITY_TEAM_HANDLE
+/scanner/   SECURITY_TEAM_HANDLE
+/setup/     SECURITY_TEAM_HANDLE

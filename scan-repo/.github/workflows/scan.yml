@@ -1,0 +1,96 @@
+# Scans one submitted bundle. Always dispatched on the default branch, so this file and scanner/ never come
+# from the commit being scanned. The bundle is data: nothing in scan-target/ is installed, built or executed.
+name: scan
+run-name: scan ${{ inputs.request_id }}
+
+on:
+  workflow_dispatch:
+    inputs:
+      request_id:
+        description: Scan request id (also the scan/<request_id> branch name)
+        required: true
+        type: string
+      sha:
+        description: Commit SHA of the bundle to scan
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: scan-${{ inputs.request_id }}
+  cancel-in-progress: false
+
+jobs:
+  scan:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      # Inputs reach scripts through the environment only, never by ${{ }} interpolation inside run blocks.
+      REQUEST_ID: ${{ inputs.request_id }}
+      SCAN_SHA: ${{ inputs.sha }}
+      GIT_LFS_SKIP_SMUDGE: "1"
+    steps:
+      - name: Validate inputs
+        run: |
+          [[ "$REQUEST_ID" =~ ^[a-z0-9][a-z0-9-]{7,63}$ ]] || { echo "::error::invalid request_id"; exit 1; }
+          [[ "$SCAN_SHA" =~ ^[0-9a-f]{40}$ ]] || { echo "::error::invalid sha"; exit 1; }
+
+      - name: Check out scanner code
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Check out the bundle as data
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ inputs.sha }}
+          path: scan-target
+          fetch-depth: 2
+          persist-credentials: false
+
+      - name: Prepare (tree check, notebooks, inventory)
+        id: prepare
+        run: python3 scanner/prepare.py --target scan-target --sha "$SCAN_SHA" --policy scanner/policy.json --out results
+
+      - name: Dependency review
+        if: steps.prepare.outputs.has_manifests == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python3 scanner/deps_review.py --target scan-target --results results
+
+      - name: Short-circuit check
+        id: precheck
+        run: python3 scanner/verdict.py --precheck --results results --policy scanner/policy.json
+
+      - name: CodeQL init
+        if: steps.prepare.outputs.codeql_languages != '' && steps.precheck.outputs.blocked != 'true'
+        uses: github/codeql-action/init@33d7b85da1a04171e211befe2c739303b9a4c066 # v4.39.3
+        with:
+          languages: ${{ steps.prepare.outputs.codeql_languages }}
+          build-mode: none
+          # No source-root: the extractors run from the workspace root, so the config limits them by path instead.
+          config-file: ./.github/codeql/codeql-config.yml
+
+      - name: CodeQL analyze
+        if: steps.prepare.outputs.codeql_languages != '' && steps.precheck.outputs.blocked != 'true'
+        uses: github/codeql-action/analyze@33d7b85da1a04171e211befe2c739303b9a4c066 # v4.39.3
+        with:
+          upload: never
+          output: results/codeql
+
+      - name: Verdict
+        if: always()
+        run: |
+          python3 scanner/verdict.py --results results --policy scanner/policy.json \
+            --request-id "$REQUEST_ID" --sha "$SCAN_SHA" --out results/verdict.json
+
+      - name: Upload evidence
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: scan-evidence
+          path: results/
+          retention-days: 7
+          if-no-files-found: error

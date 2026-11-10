@@ -1,0 +1,11 @@
+{
+  "name": "scan-branches",
+  "target": "branch",
+  "enforcement": "active",
+  "conditions": { "ref_name": { "include": ["refs/heads/scan/**"], "exclude": [] } },
+  "rules": [
+    { "type": "creation" },
+    { "type": "update" },
+    { "type": "deletion" }
+  ]
+}

@@ -1,0 +1,11 @@
+{
+  "version": "2026-11-09.1",
+  "codeql": {
+    "deny_security_severity": 7.0
+  },
+  "dependencies": {
+    "deny_severities": ["critical", "high"],
+    "unpinned_manifest": "deny"
+  },
+  "short_circuit": false
+}

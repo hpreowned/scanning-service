@@ -1,0 +1,142 @@
+openapi: 3.0.3
+info:
+  title: Artifact scan service
+  version: 0.2.0
+  description: >
+    Scans an AI-generated artifact bundle with GitHub Code Security (CodeQL, dependency review, push protection)
+    and returns a verdict. A scan takes a few minutes; start it, then poll.
+    Every call is safe to repeat: submitting the same bytes again continues the same scan.
+servers:
+  - url: http://scansvc.artifacts-system.svc.cluster.local
+security:
+  - bearer: []
+paths:
+  /healthz:
+    get:
+      operationId: health
+      summary: Liveness probe
+      security: []
+      responses:
+        "200":
+          description: The service is up
+  /metrics:
+    get:
+      operationId: metrics
+      summary: Prometheus metrics
+      security: []
+      responses:
+        "200":
+          description: Metrics in Prometheus text format
+  /v1/scans:
+    post:
+      operationId: startScan
+      summary: Start a security scan of a bundle
+      description: >
+        Upload the bundle as a zip in the request body. Returns a scan id to poll with getScan. Uploading the
+        same bytes again returns the existing scan instead of starting a new one.
+      parameters:
+        - name: X-Bundle-Sha256
+          in: header
+          required: false
+          description: Hex sha256 of the zip. When present the service rejects a body that does not match.
+          schema: { type: string, pattern: "^[0-9a-fA-F]{64}$" }
+        - name: X-Job-Id
+          in: header
+          required: false
+          description: The caller's own id for this publish. Recorded on the scan and in the audit trail.
+          schema: { type: string, pattern: "^[A-Za-z0-9_.:-]{1,80}$" }
+        - name: traceparent
+          in: header
+          required: false
+          description: W3C trace context, recorded on the scan.
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/zip:
+            schema: { type: string, format: binary }
+      responses:
+        "200":
+          description: The answer is already final (a cached verdict, or a secret found before anything was pushed)
+          content: { application/json: { schema: { $ref: "#/components/schemas/Scan" } } }
+        "202":
+          description: The scan is running; poll getScan
+          content: { application/json: { schema: { $ref: "#/components/schemas/Scan" } } }
+        "401": { description: Missing or wrong bearer token }
+        "413": { description: The zip is larger than the configured limit }
+        "429":
+          description: Too many scans in flight. Wait for the Retry-After header (seconds), then submit again.
+          headers:
+            Retry-After: { schema: { type: integer } }
+        "422":
+          description: The upload is not an acceptable bundle (unsafe path, symlink, node_modules, sha256 mismatch)
+          content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } }
+  /v1/scans/{scanId}:
+    get:
+      operationId: getScan
+      summary: Get the status and verdict of a scan
+      description: >
+        Poll every 15 seconds until status is PASS, FAIL or ERROR. Publish only on PASS. ERROR means the scan
+        did not complete and must be treated as a block, not as a pass.
+      parameters:
+        - name: scanId
+          in: path
+          required: true
+          schema: { type: string, pattern: "^[a-z0-9-]{8,64}$" }
+      responses:
+        "200":
+          description: The scan
+          content: { application/json: { schema: { $ref: "#/components/schemas/Scan" } } }
+        "401": { description: Missing or wrong bearer token }
+        "404": { description: Unknown scan id }
+components:
+  securitySchemes:
+    bearer:
+      type: http
+      scheme: bearer
+      description: >
+        A Microsoft Entra access token issued for this service, from a caller on the service's allowlist.
+        (A shared token is accepted only when the service runs in its laptop mode.)
+  schemas:
+    Scan:
+      type: object
+      required: [scan_id, sha256, status, findings]
+      properties:
+        scan_id: { type: string }
+        sha256: { type: string, description: sha256 of the bytes that were scanned }
+        status: { type: string, enum: [running, PASS, FAIL, ERROR] }
+        reused: { type: boolean, description: True when an existing scan of the same bytes was returned }
+        commit_sha: { type: string, nullable: true }
+        run_url: { type: string, nullable: true, description: The GitHub Actions run, for operators }
+        policy_version: { type: string, nullable: true }
+        detail: { type: string, nullable: true }
+        step: { type: string, enum: [created, pushed, dispatching, dispatched], description: How far a running scan has got }
+        job_ref: { type: string, nullable: true, description: The X-Job-Id the scan was submitted with }
+        caller: { type: string, nullable: true }
+        trace: { type: string, nullable: true }
+        findings:
+          type: array
+          items: { $ref: "#/components/schemas/Finding" }
+        scanners:
+          type: array
+          description: Which scanners ran, were not applicable, or left no output
+          items: { type: object }
+        unscanned:
+          type: array
+          description: Files no scanner covered
+          items: { type: object }
+        created_at: { type: number }
+        updated_at: { type: number }
+    Finding:
+      type: object
+      required: [rule, severity, message]
+      properties:
+        rule: { type: string, example: GH-001 }
+        severity: { type: string, enum: [deny, warn, info, error] }
+        file: { type: string }
+        line: { type: integer }
+        message: { type: string }
+    Error:
+      type: object
+      properties:
+        detail: { type: string }

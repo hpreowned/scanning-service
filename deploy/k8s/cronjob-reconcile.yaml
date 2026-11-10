@@ -1,0 +1,53 @@
+# Advances scans nobody is polling, so their verdicts are recorded and their scan/* branches are deleted.
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: scansvc-reconcile
+  namespace: artifacts-system
+spec:
+  schedule: "* * * * *"
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 1
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      backoffLimit: 0
+      activeDeadlineSeconds: 50
+      template:
+        metadata:
+          labels:
+            app: scansvc-reconcile
+            azure.workload.identity/use: "true"
+        spec:
+          serviceAccountName: scansvc
+          automountServiceAccountToken: false
+          restartPolicy: Never
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 10001
+            fsGroup: 10001
+            seccompProfile: { type: RuntimeDefault }
+          containers:
+            - name: reconcile
+              image: REPLACE_WITH_REGISTRY/scansvc:REPLACE_WITH_TAG
+              command: ["scanctl", "reconcile"]
+              envFrom:
+                - configMapRef: { name: scansvc }
+              resources:
+                requests: { cpu: 50m, memory: 128Mi }
+                limits: { cpu: 500m, memory: 512Mi }
+              securityContext:
+                allowPrivilegeEscalation: false
+                readOnlyRootFilesystem: true
+                capabilities: { drop: ["ALL"] }
+              volumeMounts:
+                - { name: secrets, mountPath: /mnt/secrets, readOnly: true }
+                - { name: tmp, mountPath: /tmp }
+          volumes:
+            - name: secrets
+              csi:
+                driver: secrets-store.csi.k8s.io
+                readOnly: true
+                volumeAttributes: { secretProviderClass: scansvc }
+            - name: tmp
+              emptyDir: { sizeLimit: 64Mi }

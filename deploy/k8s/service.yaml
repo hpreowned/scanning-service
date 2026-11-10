@@ -1,0 +1,11 @@
+# ClusterIP only. Callers inside the cluster reach it directly; anything outside comes through APIM.
+apiVersion: v1
+kind: Service
+metadata:
+  name: scansvc
+  namespace: artifacts-system
+spec:
+  type: ClusterIP
+  selector: { app: scansvc }
+  ports:
+    - { name: http, port: 80, targetPort: http }

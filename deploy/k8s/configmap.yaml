@@ -1,0 +1,21 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: scansvc
+  namespace: artifacts-system
+data:
+  SCAN_REPO: "REPLACE_WITH_OWNER/REPO"
+  SCAN_REPO_DEFAULT_BRANCH: "main"
+  SCAN_WORKFLOW_FILE: "scan.yml"
+  GITHUB_AUTH_MODE: "app"
+  GITHUB_APP_ID: "REPLACE_WITH_APP_ID"
+  GITHUB_APP_INSTALLATION_ID: "REPLACE_WITH_INSTALLATION_ID"
+  GITHUB_APP_PRIVATE_KEY_PATH: "/mnt/secrets/github-app.pem"
+  SCAN_STORE_URL: "https://REPLACE_WITH_STORAGE_ACCOUNT.blob.core.windows.net/scans"
+  EVIDENCE_STORE_URL: "https://REPLACE_WITH_STORAGE_ACCOUNT.blob.core.windows.net/scan-evidence"
+  MAX_SCANS_IN_FLIGHT: "20"
+  # Callers present an Entra token for this audience; only the listed client or object ids are accepted.
+  SCAN_AUTH_MODE: "entra"
+  ENTRA_TENANT_ID: "REPLACE_WITH_TENANT_ID"
+  ENTRA_AUDIENCE: "REPLACE_WITH_SCANSVC_APP_ID_URI"
+  ENTRA_ALLOWED_CALLERS: "REPLACE_WITH_SCANNER_WORKER_CLIENT_ID"

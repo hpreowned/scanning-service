@@ -1,0 +1,58 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: scansvc
+  namespace: artifacts-system
+  labels: { app: scansvc }
+spec:
+  replicas: 2
+  selector:
+    matchLabels: { app: scansvc }
+  template:
+    metadata:
+      labels:
+        app: scansvc
+        azure.workload.identity/use: "true"
+    spec:
+      serviceAccountName: scansvc
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        fsGroup: 10001
+        seccompProfile: { type: RuntimeDefault }
+      containers:
+        - name: scansvc
+          image: REPLACE_WITH_REGISTRY/scansvc:REPLACE_WITH_TAG
+          ports:
+            - { name: http, containerPort: 8080 }
+          envFrom:
+            - configMapRef: { name: scansvc }
+          readinessProbe:
+            httpGet: { path: /healthz, port: http }
+            periodSeconds: 10
+          livenessProbe:
+            httpGet: { path: /healthz, port: http }
+            periodSeconds: 20
+          resources:
+            requests: { cpu: 100m, memory: 256Mi }
+            limits: { cpu: "1", memory: 1Gi }
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities: { drop: ["ALL"] }
+          volumeMounts:
+            - { name: secrets, mountPath: /mnt/secrets, readOnly: true }
+            - { name: tmp, mountPath: /tmp }
+            - { name: home, mountPath: /home/scansvc }
+      volumes:
+        - name: secrets
+          csi:
+            driver: secrets-store.csi.k8s.io
+            readOnly: true
+            volumeAttributes: { secretProviderClass: scansvc }
+        # Bundles are extracted and committed here, then removed. Sized for a few concurrent 25 MiB uploads.
+        - name: tmp
+          emptyDir: { sizeLimit: 1Gi }
+        - name: home
+          emptyDir: { sizeLimit: 16Mi }

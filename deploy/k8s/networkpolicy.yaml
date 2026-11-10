@@ -1,0 +1,16 @@
+# Only the artifacts platform's own pods may call the service. Egress to GitHub, Key Vault and Blob Storage is
+# by FQDN and so belongs in your egress firewall, not in a NetworkPolicy; the hosts are listed in README.md.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: scansvc-ingress
+  namespace: artifacts-system
+spec:
+  podSelector:
+    matchLabels: { app: scansvc }
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        - podSelector: {}
+      ports:
+        - { protocol: TCP, port: 8080 }
